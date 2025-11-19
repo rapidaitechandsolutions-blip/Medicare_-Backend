@@ -1,3 +1,4 @@
+// server.ts (or index.ts) — drop-in replacement
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -19,21 +20,61 @@ import { logger } from "./utils/logger";
 
 const app = express();
 
+/**
+ * Helper: sanitize any env-provided base so we never pass a full URL into app.use()
+ * - if value is a full URL -> extract pathname
+ * - normalize to '' or a path that starts with '/' and no trailing slash
+ */
+function sanitizeBasePath(value?: string) {
+  if (!value) return "";
+  // If it's a full URL, extract the pathname
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const u = new URL(value);
+      const p = u.pathname === "/" ? "" : u.pathname.replace(/\/+$/, "");
+      return p;
+    } catch (err) {
+      // fallthrough to normalization
+    }
+  }
+  // ensure leading slash (or empty) and remove trailing slashes
+  const padded = value ? (value.startsWith("/") ? value : `/${value}`) : "";
+  return padded.replace(/\/+$/, "");
+}
+
+/**
+ * Setup CORS safely:
+ * - Use a whitelist array
+ * - Use a callback origin function that only returns true/false
+ * - This avoids accidentally passing a URL into express route parser
+ */
 const allowedOrigins = [
   "https://medicare-frontend-705n.onrender.com",
   "http://localhost:3000",
 ];
 
-app.use(
-  cors({
-    origin: allowedOrigins,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    credentials: true,
-  })
-);
+// origin as a callback is safer when you want to log / accept tools (undefined origin)
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // origin === undefined for non-browser requests (curl, Postman, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    logger.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error("CORS policy: Origin not allowed"), false);
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
+};
 
-// For preflight
-app.options("*", cors());
+app.use(cors(corsOptions));
+// handle preflight for all routes
+app.options("*", cors(corsOptions));
+
 // -----------------------------
 // Helmet (Different for DEV vs PROD)
 // -----------------------------
@@ -89,15 +130,25 @@ app.use(
 app.use(rateLimiter);
 
 // -----------------------------
-// Routes
+// Resolve sanitized base path (guard against full URLs in ENV)
 // -----------------------------
-app.use("/api/auth", authRoutes);
-app.use("/api/customers", customerRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/sales", saleRoutes);
-app.use("/api/invoices", invoiceRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/razorpay", razorpayRoutes);
+const SANITIZED_BASE = sanitizeBasePath(ENV.API_BASE ?? ENV.BASE_PATH);
+if (ENV.API_BASE && SANITIZED_BASE === "") {
+  // If API_BASE was a full URL with '/' path, sanitize returns ''. That's OK.
+  logger.info("Resolved SANITIZED_BASE to empty (root).");
+}
+logger.info(`Mounting API routes at base: '${SANITIZED_BASE || "/"}'`);
+
+// -----------------------------
+// Routes (use sanitized base so we never pass a full URL into app.use)
+// -----------------------------
+app.use(`${SANITIZED_BASE}/auth`, authRoutes);
+app.use(`${SANITIZED_BASE}/customers`, customerRoutes);
+app.use(`${SANITIZED_BASE}/products`, productRoutes);
+app.use(`${SANITIZED_BASE}/sales`, saleRoutes);
+app.use(`${SANITIZED_BASE}/invoices`, invoiceRoutes);
+app.use(`${SANITIZED_BASE}/settings`, settingsRoutes);
+app.use(`${SANITIZED_BASE}/razorpay`, razorpayRoutes);
 
 // -----------------------------
 // Global Error Handler
@@ -119,5 +170,13 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// Catch and log uncaught rejections/exception early to help debugging on startup
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught Exception:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled Rejection:", reason);
+});
 
 startServer();
