@@ -24,7 +24,7 @@ app.use(
   cors({
     origin: [
       "*",
-      "https://medicare-backend-fs7a.onrender.com"
+      "https://medicare-frontend-705n.onrender.com/"
     ],
     credentials: true,
   })
