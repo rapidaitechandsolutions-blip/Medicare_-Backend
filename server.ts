@@ -1,4 +1,4 @@
-// server.ts (or index.ts) — drop-in replacement
+// server.ts
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -34,7 +34,7 @@ function sanitizeBasePath(value?: string) {
       const p = u.pathname === "/" ? "" : u.pathname.replace(/\/+$/, "");
       return p;
     } catch (err) {
-      // fallthrough to normalization
+      // fall through to normalization
     }
   }
   // ensure leading slash (or empty) and remove trailing slashes
@@ -43,26 +43,27 @@ function sanitizeBasePath(value?: string) {
 }
 
 /**
- * Setup CORS safely:
- * - Use a whitelist array
- * - Use a callback origin function that only returns true/false
- * - This avoids accidentally passing a URL into express route parser
+ * Build allowedOrigins safely from ENV and sensible defaults.
+ * ENV.CORS_ORIGIN is expected to be an array of full URLs (e.g. ["http://localhost:3000", "https://app.example.com"])
  */
-const allowedOrigins = [
-  "https://medicare-frontend-705n.onrender.com",
-  "http://localhost:3000",
-];
+const defaultOrigins = ["http://localhost:3000", "http://localhost:5173"];
+const envOrigins = Array.isArray(ENV.CORS_ORIGIN) ? ENV.CORS_ORIGIN : [ENV.CORS_ORIGIN];
+const allowedOrigins = Array.from(new Set([...envOrigins.filter(Boolean), ...defaultOrigins]));
 
-// origin as a callback is safer when you want to log / accept tools (undefined origin)
+/**
+ * CORS options: origin as callback to allow logging + safe checks.
+ * (Use proper typing for callback)
+ */
 const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    // origin === undefined for non-browser requests (curl, Postman, server-to-server)
-    if (!origin) {
-      return callback(null, true);
-    }
+  origin: (origin, callback: (err: Error | null, allow?: boolean) => void) => {
+    // allow non-browser or same-origin requests (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+
+    // origin is a string like "http://localhost:3000"
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
     logger.warn(`[CORS] Blocked origin: ${origin}`);
     return callback(new Error("CORS policy: Origin not allowed"), false);
   },
@@ -72,15 +73,14 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
-// handle preflight for all routes
+// Ensure preflight is handled for ALL routes
 app.options("*", cors(corsOptions));
 
 // -----------------------------
 // Helmet (Different for DEV vs PROD)
 // -----------------------------
 if (ENV.NODE_ENV === "development") {
-  console.log("✅ Running in DEVELOPMENT mode — CSP Disabled for easier debugging");
-
+  logger.info("✅ Running in DEVELOPMENT mode — CSP Disabled for easier debugging");
   app.use(
     helmet({
       contentSecurityPolicy: false,
@@ -89,8 +89,7 @@ if (ENV.NODE_ENV === "development") {
     })
   );
 } else {
-  console.log("✅ Running in PRODUCTION mode — Secure CSP Enabled");
-
+  logger.info("✅ Running in PRODUCTION mode — Secure CSP Enabled");
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -116,7 +115,7 @@ if (ENV.NODE_ENV === "development") {
 app.use(express.json());
 
 // -----------------------------
-// Logger
+// Logger (morgan -> app logger)
 // -----------------------------
 app.use(
   morgan("combined", {
@@ -132,9 +131,10 @@ app.use(rateLimiter);
 // -----------------------------
 // Resolve sanitized base path (guard against full URLs in ENV)
 // -----------------------------
-const SANITIZED_BASE = sanitizeBasePath(ENV.API_BASE ?? ENV.BASE_PATH);
-if (ENV.API_BASE && SANITIZED_BASE === "") {
-  // If API_BASE was a full URL with '/' path, sanitize returns ''. That's OK.
+const rawBase = (ENV.API_BASE && ENV.API_BASE.length ? ENV.API_BASE : (ENV.BASE_PATH ?? "")) as string;
+const SANITIZED_BASE = sanitizeBasePath(rawBase);
+if (rawBase && SANITIZED_BASE === "") {
+  // If API_BASE was a full URL that pointed to '/', sanitize returns ''. That's OK.
   logger.info("Resolved SANITIZED_BASE to empty (root).");
 }
 logger.info(`Mounting API routes at base: '${SANITIZED_BASE || "/"}'`);
@@ -173,7 +173,8 @@ const startServer = async () => {
 
 // Catch and log uncaught rejections/exception early to help debugging on startup
 process.on("uncaughtException", (err) => {
-  logger.error("Uncaught Exception:", err);
+  logger.error("Uncaught Exception:", err instanceof Error ? err.message : err);
+  logger.error(err);
 });
 process.on("unhandledRejection", (reason) => {
   logger.error("Unhandled Rejection:", reason);
