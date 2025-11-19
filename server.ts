@@ -19,24 +19,47 @@ import { logger } from "./utils/logger";
 
 const app = express();
 
-// ✅ CORS
-app.use(
-  cors({
-    origin: [
-      "*",
-      "https://medicare-frontend-705n.onrender.com/"
-    ],
-    credentials: true,
-  })
-);
+// -----------------------------
+// CORS - robust & secure config
+// -----------------------------
+const allowedOrigins = new Set([
+  "https://medicare-frontend-705n.onrender.com",
+]);
 
-// ✅ Helmet (Different for DEV vs PROD)
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // origin === undefined for non-browser requests (curl, mobile apps, server-to-server)
+    logger.info("[CORS] incoming origin:", origin);
+    if (!origin) {
+      // allow non-browser or same-origin requests
+      return callback(null, true);
+    }
+    if (allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    // Blocked - not an allowed origin
+    return callback(new Error("CORS policy: Origin not allowed"), false);
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true, // allow cookies/auth; NOTE: origin cannot be '*'
+  optionsSuccessStatus: 204,
+};
+
+// Apply CORS before routes so preflight requests are handled
+app.use(cors(corsOptions));
+// Ensure preflight OPTIONS are handled for all routes
+app.options("*", cors(corsOptions));
+
+// -----------------------------
+// Helmet (Different for DEV vs PROD)
+// -----------------------------
 if (ENV.NODE_ENV === "development") {
   console.log("✅ Running in DEVELOPMENT mode — CSP Disabled for easier debugging");
 
   app.use(
     helmet({
-      contentSecurityPolicy: false, // ✅ Disable CSP in dev
+      contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: false,
     })
@@ -54,7 +77,7 @@ if (ENV.NODE_ENV === "development") {
           imgSrc: ["'self'", "data:", "blob:"],
           styleSrc: ["'self'", "'unsafe-inline'", "https:"],
           connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
-          frameSrc: ["'self'", "https:"], // ✅ Required for Razorpay iframe
+          frameSrc: ["'self'", "https:"], // Required for Razorpay iframe
         },
       },
       crossOriginEmbedderPolicy: false,
@@ -63,20 +86,28 @@ if (ENV.NODE_ENV === "development") {
   );
 }
 
-// ✅ Body parser
+// -----------------------------
+// Body parser (after security middleware)
+// -----------------------------
 app.use(express.json());
 
-// ✅ Logger
+// -----------------------------
+// Logger
+// -----------------------------
 app.use(
   morgan("combined", {
     stream: { write: (msg: string) => logger.info(msg.trim()) },
   })
 );
 
-// ✅ Rate limiting
+// -----------------------------
+// Rate limiting
+// -----------------------------
 app.use(rateLimiter);
 
-// ✅ Routes
+// -----------------------------
+// Routes
+// -----------------------------
 app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/products", productRoutes);
@@ -85,10 +116,14 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/razorpay", razorpayRoutes);
 
-// ✅ Global Error Handler
+// -----------------------------
+// Global Error Handler
+// -----------------------------
 app.use(errorHandler);
 
-// ✅ Start Server
+// -----------------------------
+// Start Server
+// -----------------------------
 const startServer = async () => {
   try {
     await connectToDatabase();
