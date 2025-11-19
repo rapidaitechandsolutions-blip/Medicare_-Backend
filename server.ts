@@ -20,7 +20,15 @@ import { logger } from "./utils/logger";
 const app = express();
 
 // ✅ CORS
-app.use(cors({ origin: ENV.CORS_ORIGIN }));
+app.use(
+  cors({
+    origin: [
+      "*",
+      "https://medicare-backend-fs7a.onrender.com"
+    ],
+    credentials: true,
+  })
+);
 
 // ✅ Helmet (Different for DEV vs PROD)
 if (ENV.NODE_ENV === "development") {
