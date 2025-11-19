@@ -19,38 +19,21 @@ import { logger } from "./utils/logger";
 
 const app = express();
 
-// -----------------------------
-// CORS - robust & secure config
-// -----------------------------
-// const allowedOrigins = new Set([
-//   "https://medicare-frontend-705n.onrender.com",
-// ]);
+const allowedOrigins = [
+  "https://medicare-frontend-705n.onrender.com",
+  "http://localhost:3000",
+];
 
-// const corsOptions: cors.CorsOptions = {
-//   origin: (origin, callback) => {
-//     // origin === undefined for non-browser requests (curl, mobile apps, server-to-server)
-//     logger.info("[CORS] incoming origin:", origin);
-//     if (!origin) {
-//       // allow non-browser or same-origin requests
-//       return callback(null, true);
-//     }
-//     if (allowedOrigins.has(origin)) {
-//       return callback(null, true);
-//     }
-//     // Blocked - not an allowed origin
-//     return callback(new Error("CORS policy: Origin not allowed"), false);
-//   },
-//   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-//   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-//   credentials: true, // allow cookies/auth; NOTE: origin cannot be '*'
-//   optionsSuccessStatus: 204,
-// };
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true,
+  })
+);
 
-// // Apply CORS before routes so preflight requests are handled
-// app.use(cors(corsOptions));
-// // Ensure preflight OPTIONS are handled for all routes
-// app.options("*", cors(corsOptions));
-
+// For preflight
+app.options("*", cors());
 // -----------------------------
 // Helmet (Different for DEV vs PROD)
 // -----------------------------
