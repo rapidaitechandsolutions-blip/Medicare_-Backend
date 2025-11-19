@@ -22,34 +22,34 @@ const app = express();
 // -----------------------------
 // CORS - robust & secure config
 // -----------------------------
-const allowedOrigins = new Set([
-  "https://medicare-frontend-705n.onrender.com",
-]);
+// const allowedOrigins = new Set([
+//   "https://medicare-frontend-705n.onrender.com",
+// ]);
 
-const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    // origin === undefined for non-browser requests (curl, mobile apps, server-to-server)
-    logger.info("[CORS] incoming origin:", origin);
-    if (!origin) {
-      // allow non-browser or same-origin requests
-      return callback(null, true);
-    }
-    if (allowedOrigins.has(origin)) {
-      return callback(null, true);
-    }
-    // Blocked - not an allowed origin
-    return callback(new Error("CORS policy: Origin not allowed"), false);
-  },
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  credentials: true, // allow cookies/auth; NOTE: origin cannot be '*'
-  optionsSuccessStatus: 204,
-};
+// const corsOptions: cors.CorsOptions = {
+//   origin: (origin, callback) => {
+//     // origin === undefined for non-browser requests (curl, mobile apps, server-to-server)
+//     logger.info("[CORS] incoming origin:", origin);
+//     if (!origin) {
+//       // allow non-browser or same-origin requests
+//       return callback(null, true);
+//     }
+//     if (allowedOrigins.has(origin)) {
+//       return callback(null, true);
+//     }
+//     // Blocked - not an allowed origin
+//     return callback(new Error("CORS policy: Origin not allowed"), false);
+//   },
+//   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+//   credentials: true, // allow cookies/auth; NOTE: origin cannot be '*'
+//   optionsSuccessStatus: 204,
+// };
 
-// Apply CORS before routes so preflight requests are handled
-app.use(cors(corsOptions));
-// Ensure preflight OPTIONS are handled for all routes
-app.options("*", cors(corsOptions));
+// // Apply CORS before routes so preflight requests are handled
+// app.use(cors(corsOptions));
+// // Ensure preflight OPTIONS are handled for all routes
+// app.options("*", cors(corsOptions));
 
 // -----------------------------
 // Helmet (Different for DEV vs PROD)
